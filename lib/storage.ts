@@ -2,7 +2,8 @@ import { FiberEntry, DailyTarget } from './types';
 
 const ENTRIES_KEY = 'fiber_entries';
 const TARGET_KEY = 'fiber_target';
-const DEFAULT_TARGET = 25; // Default daily fiber target in grams
+const DEFAULT_TARGET_MIN = 25;
+const DEFAULT_TARGET_MAX = 30;
 
 // Check if we're in the browser
 const isBrowser = typeof window !== 'undefined';
@@ -66,20 +67,28 @@ export const storageUtils = {
     return entries.filter(e => e.date === date);
   },
 
-  // Get daily target
-  getTarget: (): number => {
-    if (!isBrowser) return DEFAULT_TARGET;
+  // Get daily target range
+  getTarget: (): DailyTarget => {
+    if (!isBrowser) return { min: DEFAULT_TARGET_MIN, max: DEFAULT_TARGET_MAX };
     try {
       const data = localStorage.getItem(TARGET_KEY);
-      return data ? JSON.parse(data) : DEFAULT_TARGET;
+      if (data) {
+        const parsed = JSON.parse(data);
+        // Handle old format (single number) and migrate to new format
+        if (typeof parsed === 'number') {
+          return { min: parsed, max: parsed + 5 };
+        }
+        return parsed;
+      }
+      return { min: DEFAULT_TARGET_MIN, max: DEFAULT_TARGET_MAX };
     } catch (error) {
       console.error('Error reading target from localStorage:', error);
-      return DEFAULT_TARGET;
+      return { min: DEFAULT_TARGET_MIN, max: DEFAULT_TARGET_MAX };
     }
   },
 
-  // Save daily target
-  saveTarget: (target: number): void => {
+  // Save daily target range
+  saveTarget: (target: DailyTarget): void => {
     if (!isBrowser) return;
     try {
       localStorage.setItem(TARGET_KEY, JSON.stringify(target));
@@ -108,15 +117,13 @@ export const getTodayDate = (): string => {
   return formatDate(new Date());
 };
 
-// Determine status color based on actual vs target
-export const getStatusColor = (actual: number, target: number): 'green' | 'yellow' | 'red' => {
-  if (actual >= target) {
-    // Check if it's too much (more than 50% over target)
-    if (actual > target * 1.5) {
-      return 'red';
-    }
-    return 'green';
+// Determine status color based on actual vs target range
+export const getStatusColor = (actual: number, target: DailyTarget): 'green' | 'yellow' | 'red' => {
+  if (actual >= target.min && actual <= target.max) {
+    return 'green'; // Within target range
+  } else if (actual < target.min) {
+    return 'yellow'; // Below minimum
+  } else {
+    return 'red'; // Above maximum
   }
-  // Below target
-  return 'yellow';
 };
