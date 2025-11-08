@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { storageUtils, getTodayDate, getStatusColor } from '@/lib/storage';
-import { FiberEntry } from '@/lib/types';
+import { FiberEntry, DailyTarget } from '@/lib/types';
 import { Plus, Trash2, Edit2, X, Check } from 'lucide-react';
 
 export default function Dashboard() {
   const [entries, setEntries] = useState<FiberEntry[]>([]);
-  const [target, setTarget] = useState<number>(25);
+  const [target, setTarget] = useState<DailyTarget>({ min: 25, max: 30 });
   const [isEditingTarget, setIsEditingTarget] = useState(false);
-  const [tempTarget, setTempTarget] = useState<string>('25');
+  const [tempTarget, setTempTarget] = useState({ min: '25', max: '30' });
   const [newEntry, setNewEntry] = useState({ amount: '', description: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ amount: '', description: '' });
@@ -17,12 +17,11 @@ export default function Dashboard() {
   const todayDate = getTodayDate();
 
   useEffect(() => {
-    // Load data from localStorage
     const loadedEntries = storageUtils.getEntriesForDate(todayDate);
     const loadedTarget = storageUtils.getTarget();
     setEntries(loadedEntries);
     setTarget(loadedTarget);
-    setTempTarget(loadedTarget.toString());
+    setTempTarget({ min: loadedTarget.min.toString(), max: loadedTarget.max.toString() });
   }, [todayDate]);
 
   const totalFiber = entries.reduce((sum, entry) => sum + entry.amount, 0);
@@ -87,26 +86,38 @@ export default function Dashboard() {
   };
 
   const handleSaveTarget = () => {
-    const newTarget = parseFloat(tempTarget);
-    if (isNaN(newTarget) || newTarget <= 0) {
-      alert('Please enter a valid target amount');
+    const newMin = parseFloat(tempTarget.min);
+    const newMax = parseFloat(tempTarget.max);
+    
+    if (isNaN(newMin) || isNaN(newMax) || newMin <= 0 || newMax <= 0) {
+      alert('Please enter valid target amounts');
       return;
     }
+    
+    if (newMin > newMax) {
+      alert('Minimum target cannot be greater than maximum target');
+      return;
+    }
+    
+    const newTarget = { min: newMin, max: newMax };
     storageUtils.saveTarget(newTarget);
     setTarget(newTarget);
     setIsEditingTarget(false);
   };
 
   const handleCancelTargetEdit = () => {
-    setTempTarget(target.toString());
+    setTempTarget({ min: target.min.toString(), max: target.max.toString() });
     setIsEditingTarget(false);
   };
 
   const getStatusText = () => {
     if (statusColor === 'green') {
-      return totalFiber > target * 1.5 ? 'Target exceeded!' : 'Target met!';
+      return 'Within target range!';
+    } else if (statusColor === 'yellow') {
+      return `${(target.min - totalFiber).toFixed(1)}g below minimum`;
+    } else {
+      return `${(totalFiber - target.max).toFixed(1)}g above maximum`;
     }
-    return `${(target - totalFiber).toFixed(1)}g below target`;
   };
 
   const getStatusBgColor = () => {
@@ -122,7 +133,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           Fiber Intake Tracker
@@ -132,7 +142,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Status Card */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -151,11 +160,22 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={tempTarget}
-                    onChange={(e) => setTempTarget(e.target.value)}
+                    value={tempTarget.min}
+                    onChange={(e) => setTempTarget({ ...tempTarget, min: e.target.value })}
                     className="w-20 px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     step="0.1"
                     min="0"
+                    placeholder="Min"
+                  />
+                  <span className="text-gray-600 dark:text-gray-400">-</span>
+                  <input
+                    type="number"
+                    value={tempTarget.max}
+                    onChange={(e) => setTempTarget({ ...tempTarget, max: e.target.value })}
+                    className="w-20 px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    step="0.1"
+                    min="0"
+                    placeholder="Max"
                   />
                   <button
                     onClick={handleSaveTarget}
@@ -175,7 +195,7 @@ export default function Dashboard() {
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="text-xl font-semibold text-gray-900 dark:text-white">
-                    {target}g
+                    {target.min}g - {target.max}g
                   </span>
                   <button
                     onClick={() => setIsEditingTarget(true)}
@@ -197,7 +217,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Add Entry Form */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
           Add Fiber Entry
@@ -255,7 +274,6 @@ export default function Dashboard() {
         </form>
       </div>
 
-      {/* Today's Entries */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
           Today&apos;s Entries
@@ -307,7 +325,7 @@ export default function Dashboard() {
 
                 <div className="flex items-center gap-2 ml-4">
                   {editingId === entry.id ? (
-                    <>
+                    <> 
                       <button
                         onClick={() => handleSaveEdit(entry.id)}
                         className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900 rounded"
@@ -324,7 +342,7 @@ export default function Dashboard() {
                       </button>
                     </>
                   ) : (
-                    <>
+                    <> 
                       <button
                         onClick={() => handleStartEdit(entry)}
                         className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900 rounded"
